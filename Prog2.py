@@ -16,6 +16,8 @@ histos['TH1']=R.TH1F('TH1','TH1', 100, 0, 100.5)
 for ch in channels:
     histos['qfineVStot_ch'+str(ch)]=R.TProfile('qfineVStot_ch'+str(ch), 'qfineVStot_ch'+str(ch), 1000, 0, 1000.5)
 
+histos['E_'+str(channels[0])+'VSE_'+str(channels[1])]=R.TProfile('E_'+str(channels[0])+'VSE_'+str(channels[1]), 'E_'+str(channels[0])+'VSE_'+str(channels[1]), 500, 5, 25.5)
+
 ranges={}
 
 for ev in range(0,nent):
@@ -27,7 +29,7 @@ for ev in range(0,nent):
         histos['qfineVStot_ch'+str(ch)].Fill(chain.tot[ch]/1000, chain.qfine[ch])
 
 c1=R.TCanvas("c1", "c1", 600, 400)
-        
+   
 for ch in channels:
     ranges['ch'+str(ch)]={}
     histos['qfineVStot_ch'+str(ch)].Fit("pol0","R","", 50.5, 196.5)
@@ -72,6 +74,11 @@ for i in range(0, nent/4):
         histos['Tot_ch'+str(ch)+o].Fill(chain.tot[ch])
     if(ech>1):
         histos['EnergyTot'+o].Fill(etot)
+        histos['E_'+str(channels[0])+'VSE_'+str(channels[1])].Fill(chain.energy[channels[0]], chain.energy[channels[1]])
+
+
+histos['E_'+str(channels[0])+'VSE_'+str(channels[1])].Draw()
+c1.SaveAs('E_'+str(channels[0])+'VSE_'+str(channels[1])+'.png')
 
 #Definisco una funzione che sia convoluzione di una distribuzione di Landau e di una Gaussiana. Utilizzo i seguenti parametri per il fit:
 #par[0] = larghezza (scala) della densita di Landau
@@ -142,6 +149,7 @@ for ch in channels:
     histos['Energy_ch'+str(ch)+'VSOV']=R.TGraphErrors()
     histos['Energy_ch'+str(ch)+'VSOV'].SetName('Energy_ch'+str(ch)+'VSOV')
 
+mip = {}
 for v in ov:
     ovS='_ov%.1f'%(v)
     i=histos['EnergyVSOV'].GetN()
@@ -149,7 +157,9 @@ for v in ov:
     for ch in channels:
         i=histos['Energy_ch'+str(ch)+'VSOV'].GetN()
         histos['Energy_ch'+str(ch)+'VSOV'].SetPoint(i, v , histos['Energy_ch'+str(ch)+ovS+'_lanGausFit'].GetParameter(1))
+        mip[str(ch)+ovS] = histos['Energy_ch'+str(ch)+ovS+'_lanGausFit'].GetParameter(1)
 
+print "MIPPPPPPPPPP", mip
 
 R.gStyle.SetOptStat(0)
 R.gStyle.SetOptTitle(0)
@@ -174,6 +184,7 @@ leg.SetTextSize(0.05)
 histos['EnergyVSOV'].SetLineColor(R.kBlack)
 histos['EnergyVSOV'].SetMarkerColor(R.kBlack)
 histos['EnergyVSOV'].SetMarkerSize(1.2)
+histos['EnergyVSOV'].SetMarkerStyle(20)
 histos['EnergyVSOV'].Draw("LPSAME")
 leg.AddEntry(histos['EnergyVSOV'], "Bar Energy SUM", "LP")
 for ich, ch in enumerate(channels):
@@ -195,9 +206,35 @@ for ch in channels:
         ovS='_ov%.1f'%(v)
         ranges['ch'+str(ch)]['eMin'+ovS]=histos['Energy_ch'+str(ch)+ovS+'_lanGausFit'].GetParameter(1)*0.9
         ranges['ch'+str(ch)]['eMax'+ovS]=histos['Energy_ch'+str(ch)+ovS+'_lanGausFit'].GetParameter(1)*2
-print ranges
+print "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", ranges
 
+R.gROOT.ProcessLine(".L timeAnalysis.C+")
 
+def Map(tf):
+    m = {}
+    for k in tf.GetListOfKeys():
+        n = k.GetName()
+        m[n] = tf.Get(n)
+    return m
+
+t=R.timeAnalysis(chain)
+t.outFileName="timeAnalysis.root"
+t.xMin=19.5-3;
+t.xMax=19.5+3;
+t.energyMin.resize(len(channels))
+t.energyMax.resize(len(channels))
+for ich,ch in enumerate(channels):
+    t.channels.push_back(ch)
+    t.qfineMin.push_back(ranges["ch"+str(ch)]['qfineMin'])
+    t.qfineMax.push_back(ranges["ch"+str(ch)]['qfineMax'])
+    for v in ov:
+        ovS='%.1f'%(v)
+        t.energyMin[ich][ovS]=ranges["ch"+str(ch)]['eMin_ov'+ovS]
+        t.energyMax[ich][ovS]=ranges["ch"+str(ch)]['eMax_ov'+ovS]
+t.Loop()
+
+fTime=R.TFile("timeAnalysis.root")
+                        
 fOut=R.TFile("histos.root", "RECREATE")
 for hN,h in histos.iteritems():
     h.Write()
